@@ -343,16 +343,11 @@ class Autopilot:
         # int error +- 1, from 0 to 500 deg/s
         heading_error_int = self.heading_error_int.value + (self.heading_error.value/50)*dt
 
-        if self.enabled.value:
-            heading_command_diff = resolv(self.heading_command.value - self.last_heading_command)
-            mul = 1-max(abs(heading_command_diff), 30.0) / 30.0 # push integral gain to zero once course change is above 30
-            #print('mul', mul, heading_command_diff, heading_error_int)
-            heading_error_int *= mul
-
         if heading_error_int > 10:
             heading_error_int = 10
         elif heading_error_int < -10:
             heading_error_int = -10
+
         self.heading_error_int.set(heading_error_int)
         
     def iteration(self):
@@ -504,7 +499,8 @@ class Autopilot:
             # decay integral with heading command changes
             e = self.heading_error_int.value
             sign = 1 if e > 0 else -1
-            self.heading_error_int.set(sign*(abs(e)-self.heading_command_rate.value*3))
+            new_int = max(abs(e)-abs(self.heading_command_rate.value/2), 0)
+            self.heading_error_int.set(sign*new_int)
 
         t5 = time.monotonic()
         if t5-t4 > period/2 and self.servo.driver:
