@@ -65,7 +65,7 @@ class menu(page):
         maxsizeslider = 0
         sliders = []
         for item in self.items[scroll:]:
-            size = self.fittext(rectangle(0, y, 1, .15), item.name)
+            size = self.fittext(rectangle(0, y, 1, .15), item.name[:12])
             if isinstance(item, ValueCheck):
                 val = self.last_val(item.pypilot_path)
                 if val is True: # draw if value is true

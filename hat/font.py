@@ -1,6 +1,6 @@
 #!/usr/bin/env python
 #
-#   Copyright (C) 2016 Sean D'Epagnier
+#   Copyright (C) 2026 Sean D'Epagnier
 #
 # This Program is free software; you can redistribute it and/or
 # modify it under the terms of the GNU General Public
@@ -23,12 +23,20 @@ except ImportError:
     import os
 
     from pypilot.hat.ugfx import ugfx
-    fontpath = os.path.abspath(os.path.expanduser('~') + '/.pypilot/ugfxfonts/') + '/'
+    fontpath = os.path.abspath(os.path.expanduser('~') + '/.pypilot/ugfxfonts') + '/'
 
-    if not os.path.exists(fontpath):
-        os.makedirs(fontpath)
-    if not os.path.isdir(fontpath):
-        raise 'ugfxfonts should be a directory'
+    try:
+        if not os.path.exists(fontpath):
+            os.makedirs(fontpath)
+        if not os.path.isdir(fontpath):
+            raise 'ugfxfonts should be a directory'
+    except Exception as e:
+        print('failed to open directory', fontpath, e)
+        print('maybe the sd card has failed, try putting the fonts in temporary user directory')
+        fontpath = os.path.abspath(os.path.expanduser('~') + '/tmp-ugfxfonts') + '/'
+        if not os.path.exists(fontpath):
+            os.makedirs(fontpath)
+        
 
 global fonts
 fonts = {}

@@ -271,6 +271,7 @@ class Arduino(Process):
                             self.hat.client.send('servo.command', (adc-512)/512)
                             break
                         elif config[i] == 'user':
+                            # although the onboard hat has ADC channels they are not yet implemented
                             print("GOT USER ADC", adc)
                             break
                     pass
