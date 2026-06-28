@@ -27,7 +27,6 @@ $(ARDUINO_PATH)/cores/arduino/wiring_digital.c \
 $(ARDUINO_PATH)/cores/arduino/wiring_analog.c \
 $(ARDUINO_PATH)/cores/arduino/WInterrupts.c \
 $(ARDUINO_PATH)/cores/arduino/new.cpp \
-$(ARDUINO_PATH)/cores/arduino/WString.cpp \
 $(ARDUINO_PATH)/cores/arduino/Stream.cpp \
 $(ARDUINO_PATH)/cores/arduino/Print.cpp \
 $(ARDUINO_PATH)/cores/arduino/WMath.cpp \
