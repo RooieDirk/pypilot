@@ -67,7 +67,7 @@ class gpio(object):
                 break
 
             value = self.request.get_value(pin)
-            self.lastkeystate[pin] = not value
+            self.lastkeystate[pin] = value == gpiod.line.Value.INACTIVE
 
         self.evalkeys()
 
