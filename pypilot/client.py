@@ -13,6 +13,7 @@ import select
 import socket
 import sys
 import time
+import queue
 
 sys.path.append(os.path.dirname(os.path.abspath(__file__)))
 import pyjson
@@ -192,7 +193,7 @@ class pypilotClient:
         self.connection = False # connect later
         self.connection_in_progress = False
         self.can_probe = not host
-        self.probed_addresses = []
+        self.probed_addresses = queue.Queue()
 
     def onconnected(self):
         self.last_values_list = False
@@ -239,19 +240,21 @@ class pypilotClient:
 
             def add_service(self, zeroconf, type, name):
                 print('service', name)
-                self.name_type = name, type
-                info = zeroconf.get_service_info(type, name)
-                #print('info', info, info.parsed_addresses()[0])
-                if not info:
-                    return
                 try:
-                    #for name, value in info.properties.items():
-                    config = self.client.config
-                    #print('info', info.addresses)
+                    if not zeroconf.loop.is_running():
+                        return
+
+                    info = zeroconf.get_service_info(type, name)
+                    if not info or not info.addresses:
+                        return
+
                     host, port = socket.inet_ntoa(info.addresses[0]), info.port
                     print('found pypilot', host, port)
-                    self.client.probed_addresses.append((host, port))
+                    self.client.probed_addresses.put((host, port))
                     #zeroconf.close()
+                except AssertionError:
+                    # Zeroconf was closed/stopped while callback was running.
+                    return
                 except Exception as e:
                     print('zeroconf service exception', e)
 
@@ -259,9 +262,25 @@ class pypilotClient:
                 pass
 
         self.can_probe = False
-        zeroconf = Zeroconf()
-        listener = Listener(self)
-        browser = ServiceBrowser(zeroconf, "_pypilot._tcp.local.", listener)
+        self.zeroconf = Zeroconf()
+        self.zeroconf_listener = Listener(self)
+        self.zeroconf_browser = ServiceBrowser(self.zeroconf, "_pypilot._tcp.local.", self.zeroconf_listener)
+
+    def cancel_probe(self):
+        browser = getattr(self, 'zeroconf_browser', None)
+        zc = getattr(self, 'zeroconf', None)
+        try:
+            if browser:
+                browser.cancel()
+            if zc:
+                zc.close()
+        except Exception:
+            pass
+
+        self.zeroconf_browser = None
+        self.zeroconf_listener = None
+        self.zeroconf = None
+    
 
     def poll(self, timeout=0):
         if not self.connection:
@@ -380,14 +399,6 @@ class pypilotClient:
         if self.connection:
             self.connection.close()
         self.connection = False
-
-    def probewait(self, timeout):
-        t0 = time.monotonic()
-        while time.monotonic() - t0 < timeout:
-            if self.probed_addresses:
-                return True
-            time.sleep(.1)
-        return False
 
     def connect(self, verbose=True):
         if self.connection:
@@ -511,16 +522,16 @@ def pypilotClientFromArgs(values, period=True, host=False):
         client.probed = True # dont probe
     if not client.connect(True):
         print(_('failed to connect to'), host)
-        while not host and client.probewait(10):
-            client.config['host'], client.config['port'] = client.probed_addresses[0]
-            client.probed_addresses = client.probed_addresses[1:]
-            #print("try connect", client.config['host'])
-            if client.connect(True):
-                break
-            print(_('failed to connect to'), client.config['host'])
-        else:
-            print(_('no pypilot server found'))
-            exit(1)
+        while not host:
+            try:
+                client.config['host'], client.config['port'] = client.probed_address_queue.get(timeout=10)
+                #print("try connect", client.config['host'])
+                if client.connect(True):
+                    break
+                print(_('failed to connect to'), client.config['host'])
+            except queue.Empty:
+                print(_('no pypilot server found'))
+                exit(1)
 
     # set any value specified with path=value
     watches = {}
