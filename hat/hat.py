@@ -14,17 +14,12 @@ import os
 import sys
 import signal # delay this?
 import select
-print('hat import 1', time.monotonic())
 from pypilot import pyjson  # very slow why?
 from pypilot.client import pypilotClient
-print('hat import 2', time.monotonic())
 
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
-print('hat import 3', time.monotonic())
 import gpio
-print('hat import 4', time.monotonic())
 import lcd
-print('hat import 5', time.monotonic())
 import arduino
 
 print('hat import done', time.monotonic())
@@ -194,7 +189,7 @@ class Web(Process):
             while True:
                 if os.system('sudo chrt -pi 0 %d 2> /dev/null > /dev/null' % os.getpid()):
                     print('warning, failed to make hat web process idle, trying renice')
-                if os.system("renice 20 %d" % os.getpid()):
+                if os.system("sudo renice 20 %d" % os.getpid()):
                     print('warning, failed to renice hat web process')
                 if os.getenv('USER') == 'tc' and time.monotonic() < 360:
                     time.sleep(30) # delay loading web and wait until modules are loaded
@@ -233,7 +228,7 @@ class Arduino(Process):
     def create(self):
         def process(pipe, config):
             print('arduino process on', os.getpid())
-            if os.system("renice -5 %d" % os.getpid()):
+            if os.system("sudo renice -5 %d" % os.getpid()):
                 print('warning, failed to renice hat arduino process')
             time.sleep(3)
             while True:

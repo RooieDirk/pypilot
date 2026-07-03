@@ -10,9 +10,7 @@
 import multiprocessing
 import os
 import socket
-import ssl
 import time
-from urllib.parse import urlparse
 
 import pyjson
 from client import pypilotClient
@@ -21,39 +19,9 @@ from nonblockingpipe import NonBlockingPipe
 from sensors import source_priority
 from values import Property, RangeProperty
 
-# Hoist optional third-party imports to the module level. They were
-# previously re-imported inside hot loops (probe_signalk, request_access,
-# connect_signalk, ZeroConfProcess.process), which both slowed the poll
-# loop and made it fragile when dependencies were missing. Fall back to
-# None on ImportError; each call-site checks.
-try:
-    import requests
-except ImportError:
-    requests = None
-else:
-    # urllib3 raises InsecureRequestWarning whenever a request runs with
-    # verify=False, which happens once signalk.tls.verify is disabled (to
-    # accept a self-signed cert) and would then flood the log. Silence just
-    # that warning at import: it never fires while verification is on, so
-    # disabling it unconditionally is harmless, and the security tradeoff
-    # stays visible through the signalk.tls.verify flag.
-    try:
-        from urllib3.exceptions import InsecureRequestWarning
-        requests.packages.urllib3.disable_warnings(InsecureRequestWarning)
-    except Exception:
-        pass
-
-try:
-    from websocket import create_connection, WebSocketBadStatusException
-except ImportError:
-    create_connection = None
-    class WebSocketBadStatusException(Exception):
-        pass
-
-try:
-    import zeroconf as _zeroconf_mod
-except ImportError:
-    _zeroconf_mod = None
+requests = None
+websocket = None
+zeroconf = None
 
 signalk_priority = source_priority['signalk']
 radians = 3.141592653589793/180
@@ -174,12 +142,21 @@ class ZeroConfProcess(multiprocessing.Process):
 
 
     def process(self):
-        time.sleep(6)
-        if _zeroconf_mod is None:
-            print('signalk: ' + _('failed to') + ' import zeroconf, ' + _('autodetection not possible'))
-            print(_('try') + ' pip3 install zeroconf ' + _('or') + ' apt install python3-zeroconf')
-            return
-        zeroconf = _zeroconf_mod
+        time.sleep(6) # delay signalk by 6 seconds to start other pypilot processes faster
+        global zeroconf
+        if zeroconf is None:
+            try:
+                import zeroconf
+            except ImportError:
+                print('signalk: ' + _('failed to') + ' import zeroconf, ' + _('autodetection not possible'))
+                print(_('try') + ' pip3 install zeroconf ' + _('or') + ' apt install python3-zeroconf')
+                while zeroconf is None:
+                    time.sleep(10)
+                    try:
+                        import zeroconf
+                        break
+                    except:
+                        pass
 
         current_ip_address = []
         zc = None
@@ -323,11 +300,28 @@ class signalk:
 
     def probe_signalk(self):
         debug('signalk ' + _('probe') + '...', self.signalk_host_port)
+        global requests
         if requests is None:
-            print('signalk ' + _('could not') + ' import requests')
-            print(_('try') + " 'sudo apt install python3-requests' " + _('or') + " 'pip3 install requests'")
-            time.sleep(50)
-            return
+            try:
+                import requests
+            except ImportError:
+                print('signalk ' + _('could not') + ' import requests')
+                print(_('try') + " 'sudo apt install python3-requests' " + _('or') + " 'pip3 install requests'")
+                time.sleep(50)
+                return
+            else:
+                # urllib3 raises InsecureRequestWarning whenever a request runs with
+                # verify=False, which happens once signalk.tls.verify is disabled (to
+                # accept a self-signed cert) and would then flood the log. Silence just
+                # that warning at import: it never fires while verification is on, so
+                # disabling it unconditionally is harmless, and the security tradeoff
+                # stays visible through the signalk.tls.verify flag.
+                try:
+                    from urllib3.exceptions import InsecureRequestWarning
+                    requests.packages.urllib3.disable_warnings(InsecureRequestWarning)
+                except Exception:
+                    pass
+            
 
         try:
             r = requests.get('http://' + self.signalk_host_port + '/signalk',
@@ -343,6 +337,7 @@ class signalk:
             # request to the http URL would hit that redirect, and requests
             # downgrades a 302'd POST to a GET, silently breaking token
             # enrollment. Use the advertised scheme and authority instead.
+            from urllib.parse import urlparse
             parsed = urlparse(ws_url)
             scheme = 'https' if parsed.scheme == 'wss' else 'http'
             self.signalk_http_base = scheme + '://' + parsed.netloc
@@ -441,18 +436,25 @@ class signalk:
             pass # ignore
 
     def connect_signalk(self):
-        if create_connection is None:
-            print('signalk ' + _('cannot create connection:') + ' websocket-client not installed')
-            print(_('try') + ' pip3 install websocket-client ' + _('or') + ' apt install python3-websocket')
-            self.signalk_host_port = False
-            return
-
         self.subscribed = {}
         for sensor in list(signalk_table):
             self.subscribed[sensor] = False
         self.subscriptions = [] # track signalk subscriptions
         self.signalk_values = {}
         self.keep_token = False
+
+        global websocket
+        if websocket is None:
+            try:
+                import ssl
+                import websocket
+            except ImportError:
+                print('signalk ' + _('cannot create connection:') + ' websocket-client not installed')
+                print(_('try') + ' pip3 install websocket-client ' + _('or') + ' apt install python3-websocket')
+                self.signalk_host_port = False
+                time.sleep(self._backoff_delay())
+                return
+
         try:
             connect_kwargs = {'header': {'Authorization': 'JWT ' + self.token}}
             # For a wss:// stream with verification disabled, tell
@@ -461,10 +463,10 @@ class signalk:
             # CERT_NONE, so this is sufficient.
             if self.signalk_ws_url.startswith('wss://') and not self.tls_verify.value:
                 connect_kwargs['sslopt'] = {'cert_reqs': ssl.CERT_NONE}
-            self.ws = create_connection(self.signalk_ws_url, **connect_kwargs)
+            self.ws = websocket.create_connection(self.signalk_ws_url, **connect_kwargs)
             self.ws.settimeout(0) # nonblocking
-            self.connect_attempts = 0
-        except WebSocketBadStatusException as e:
+            self.connect_attempts = 0            
+        except websocket.WebSocketBadStatusException as e:
             print('signalk ' + _('bad status, rejecting token'), e)
             self.invalid_token()
             self.ws = False
@@ -548,9 +550,8 @@ class signalk:
                 self.signalk_ws_url = False
                 self.disconnect_signalk()
 
-        if not manual_host:
-            if self.zero_conf:
-                zc = self.zero_conf.poll()
+        if not manual_host and self.zero_conf:
+            zc = self.zero_conf.poll()
             if zc == 'disconnect':
                 self.signalk_host_port = False
                 self.disconnect_signalk()
@@ -558,7 +559,6 @@ class signalk:
                 host_port = zc
                 self.signalk_host_port = host_port
                 print('signalk ' + _('server found'), host_port)
-        
         
         self.client.poll(timeout)
         if not self.signalk_host_port:
