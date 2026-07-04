@@ -10,7 +10,6 @@
 import threading
 import time
 
-
 # load lirc in background thread because it takes more than
 # 2 seconds and this is an unreasonable delay
 class LoadLIRC(threading.Thread):

@@ -1,6 +1,6 @@
 #!/usr/bin/env python
 #
-#   Copyright (C) 2023 Sean D'Epagnier
+#   Copyright (C) 2026 Sean D'Epagnier
 #
 # This Program is free software; you can redistribute it and/or
 # modify it under the terms of the GNU General Public
@@ -186,14 +186,15 @@ class Web(Process):
 
     def create(self):
         def process(pipe, config):
+            cmd = 'sudo -n chrt -pi 0 %d </dev/null >/dev/null 2>&1' % os.getpid()
+            if os.system(cmd):
+                print('warning, failed to make hat web process idle, trying renice')
+            if os.system("renice 20 %d" % os.getpid()):
+                print('warning, failed to renice hat web process')
+
             while True:
-                cmd = 'sudo chrt -pi 0 %d 2> /dev/null > /dev/null' % os.getpid()
-                if os.system(cmd):
-                    print('warning, failed to make hat web process idle, trying renice')
-                if os.system("sudo renice 20 %d" % os.getpid()):
-                    print('warning, failed to renice hat web process')
                 if os.getenv('USER') == 'tc' and time.monotonic() < 360:
-                    time.sleep(30) # delay loading web and wait until modules are loaded
+                    time.sleep(60) # delay loading web and wait until modules are loaded
                 else:
                     time.sleep(5) # delay less on other platforms
                 try:
@@ -294,9 +295,12 @@ class Arduino(Process):
 
 class LCD(Process):
     def __init__(self, hat):
+        print('lcd __init__', time.monotonic())
         super().__init__(hat)
+        print('lcd __init__ done', time.monotonic())
 
     def create(self):
+        print('lcd create', time.monotonic())
         def process(pipe, config):
             print('lcd process start', time.monotonic())
             sys.stdout.reconfigure(line_buffering=True)
@@ -315,7 +319,9 @@ class LCD(Process):
                 while True:
                     self.lcd.poll()
 
+        print('lcd create2', time.monotonic())
         super().create(process)
+        print('lcd create3', time.monotonic())
 
     def keypad(self, index, count):
         self.send((index, count))
@@ -394,15 +400,8 @@ class Hat:
             self.config['host'] = sys.argv[1]
             self.write_config()
 
-        self.poller = select.poll()
-        self.gpio = gpio.gpio()
-        print('processes 2...', time.monotonic())
-        self.poller.register(self.gpio.pipe[1], select.POLLIN)
-
+        print('lcd1', time.monotonic())
         self.lcd = LCD(self)
-        print('processes 4...', time.monotonic())
-        
-        #time.sleep(1)
 
         print('hat init processes done', time.monotonic())
         self.watchlist = ['ap.enabled', 'ap.heading_command', 'ap.mode']
@@ -415,6 +414,7 @@ class Hat:
         # receive heading once per second for mode changes
         self.client.watch('ap.heading', 1)
 
+        self.poller = select.poll()
         if 'arduino' in self.config['hat']:
             self.arduino = Arduino(self)
             self.poller.register(self.arduino.pipe, select.POLLIN)
@@ -424,13 +424,7 @@ class Hat:
         self.lcd.poll()
 
         print('init lircd', time.monotonic())
-
-        import lircd
-        self.lirc = lircd.lirc(self.config)
-        self.lirc.registered = False
         self.keytime = False
-
-        self.inputs = [self.gpio, self.arduino, self.lirc]
 
         # keypad for lcd interface
         self.actions = []
@@ -489,6 +483,17 @@ class Hat:
         print('init web', time.monotonic())
         self.web = Web(self)
 
+        print('init lirc', time.monotonic())
+        import lircd
+        self.lirc = lircd.lirc(self.config)
+        self.lirc.registered = False
+        
+        print('init gpio', time.monotonic())
+        self.gpio = gpio.gpio()
+        self.poller.register(self.gpio.pipe[1], select.POLLIN)
+
+        self.inputs = [self.gpio, self.arduino, self.lirc]
+        
         def cleanup(signal_number, frame=None):
             print('got signal', signal_number, 'cleaning up', os.getpid())
             childpids = []

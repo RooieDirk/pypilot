@@ -11,8 +11,9 @@ import os
 import time
 
 import threading
-import gpiod
 from datetime import timedelta
+
+gpiod = None
 
 class gpio(object):
     def __init__(self):
@@ -34,20 +35,27 @@ class gpio(object):
         self.keypin = False
         self.lastkeyevent = 0
 
-        if not gpiod:
+        self.thread_running = True
+        self.thread = threading.Thread(target=self.thread_main, daemon=True)
+        self.thread.start()
+
+    def thread_main(self):
+        global gpiod
+
+        print('gpio thread main', time.monotonic())
+        try:
+            import gpiod
+        except Exception as e:
+            print('no gpiod support', e)
             return
+        print('gpio thread main loaded', time.monotonic())
 
         config = {}
         for pin in self.pins:
             config[pin] = gpiod.LineSettings(direction=gpiod.line.Direction.INPUT, edge_detection=gpiod.line.Edge.BOTH,
                                              bias=gpiod.line.Bias.PULL_UP, debounce_period=timedelta(milliseconds=20))
         self.request = gpiod.request_lines("/dev/gpiochip0", consumer="keys", config=config)
-
-        self.thread_running = True
-        self.thread = threading.Thread(target=self.thread_main, daemon=True)
-        self.thread.start()
-
-    def thread_main(self):
+        
         while self.thread_running:
             # This blocks waiting for GPIO edge events.
             if not self.request.wait_edge_events(timeout=1.0):

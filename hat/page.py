@@ -13,8 +13,6 @@ import font
 
 white = 0xffffff
 black = 0x00
-#white = ugfx.color(255, 255, 255)
-#black = ugfx.color(0, 0, 0)
 
 BIG_PORT, SMALL_PORT, SMALL_STARBOARD, BIG_STARBOARD, AUTO, MENU, MODE, NUM_KEYS = range(8)
 
@@ -277,11 +275,13 @@ class page:
 
     def round_last_val(self, name, places):
         v = self.last_val(name)
+        if isinstance(v, bool):
+            return 'N/A'
         try:
             n = 10**places
             return str(round(v*n)/n)
-        except Exception:
-            return v
+        except:
+            return str(v)
 
     def testkeydown(self, key):
         keypad = self.lcd.keypad
@@ -363,7 +363,7 @@ class info(page):
             if self.lcd.battery_voltage:
                 items += [_('battery'), '%.3f' % self.lcd.battery_voltage]
             else:
-                items += [_('faults'), self.round_last_val('servo.faults', 0)]
+                items += [_('faults'), str(self.last_val('servo.faults'))]
         else:
             spacing = .18
             ver = self.last_val('ap.version')
