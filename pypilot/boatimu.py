@@ -133,7 +133,8 @@ class IMU:
             while True:
                 time.sleep(10) # do nothing
 
-        if os.system('sudo chrt -pf 2 %d 2>&1 > /dev/null' % os.getpid()):
+        cmd = 'sudo -n chrt -f -p 2 %d </dev/null >/dev/null 2>&1' % os.getpid()
+        if os.system(cmd):
             print(_('warning, failed to make imu process realtime'))
         else:
             print(_('made imu process realtime'))
@@ -332,9 +333,11 @@ def heading_filter(lp, a, b):
     return result
 
 def CalibrationProcess(cal_pipe, client):
-    if os.system('sudo chrt -po 0 %d 2> /dev/null > /dev/null' % os.getpid()):
+    cmd1 = 'sudo -n chrt -po 0 %d </dev/null >/dev/null 2>&1' % os.getpid()
+    if os.system(cmd1):
         print(_('warning, failed to make calibration process other'))
-    if os.system('sudo chrt -pi 0 %d 2> /dev/null > /dev/null' % os.getpid()):
+    cmd2 = 'sudo -n chrt -pi 0 %d </dev/null >/dev/null 2>&1' % os.getpid()
+    if os.system(cmd2):
         print(_('warning, failed to make calibration process idle, trying renice'))
         if os.system("renice 20 %d" % os.getpid()):
             print(_('warning, failed to renice calibration process'))

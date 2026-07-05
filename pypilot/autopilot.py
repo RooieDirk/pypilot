@@ -12,6 +12,7 @@
 import time
 
 print('autopilot start', time.monotonic())
+
 import io
 import math
 import os
@@ -162,7 +163,8 @@ class Autopilot:
         '''
 
         self.server.poll() # setup process before we switch main process to realtime
-        if os.system('sudo chrt -pf 1 %d 2>&1 > /dev/null' % os.getpid()):
+        cmd = 'sudo -n chrt -f -p 1 %d </dev/null >/dev/null 2>&1' % os.getpid()
+        if os.system(cmd):
             print(_('warning: failed to make autopilot process realtime'))
 
         self.lasttime = time.monotonic()
