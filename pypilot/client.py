@@ -248,6 +248,8 @@ class pypilotClient:
                     if not info or not info.addresses:
                         return
 
+                    if info.port == 80:
+                        return
                     host, port = socket.inet_ntoa(info.addresses[0]), info.port
                     print('found pypilot', host, port)
                     self.client.probed_addresses.put((host, port))
@@ -524,7 +526,7 @@ def pypilotClientFromArgs(values, period=True, host=False):
         print(_('failed to connect to'), host)
         while not host:
             try:
-                client.config['host'], client.config['port'] = client.probed_address_queue.get(timeout=10)
+                client.config['host'], client.config['port'] = client.probed_addresses.get(timeout=10)
                 #print("try connect", client.config['host'])
                 if client.connect(True):
                     break
