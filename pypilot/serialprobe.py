@@ -13,11 +13,11 @@ import pyjson
 pypilot_dir = os.path.expanduser('~') + '/.pypilot/'
 
 def debug(*args):
-    #print(*args)
+    #print('serialprobe', *args)
     pass
 
 def read_config(filename, fail):
-    devices = []
+    devices = {}
     if os.path.exists(pypilot_dir + filename):
         try:
             f = open(pypilot_dir + filename)
@@ -25,7 +25,12 @@ def read_config(filename, fail):
                 device = f.readline()
                 if not device:
                     break
-                devices.append(device.strip())
+                device = device.split()
+                if len(device) > 1:
+                    baud = device[1]
+                else:
+                    baud = None
+                devices[device[0]] = baud
             f.close()
             return devices
         except Exception:
@@ -147,6 +152,14 @@ def scan_devices():
                 break
         else:
             allowed_devices[path] = {'realpath': realpath}
+
+        # if baud is given in allowed serial ports file fill this in
+        baud = allowed_serial_ports[path]
+        if baud:
+            for device in allowed_devices:
+                if allowed_devices[device]['realpath'] == realpath:
+                    allowed_devices[device]['baud'] = baud
+                    break
 
     return allowed_devices
 
@@ -339,6 +352,10 @@ def probe(name, bauds, timeout=5):
     if devices[device]['realpath'] in gpsdevices:
         debug('serial probe abort', name, 'device', device, 'is a gps device')
         return False
+
+    # if baud hint is given add it to start of list of bauds to probe
+    if 'baud' in devices[device]:
+        bauds = [devices[device]['baud']] + bauds
 
     probe['device'] = device
     probe['bauds'] = bauds

@@ -187,7 +187,8 @@ class Web(Process):
     def create(self):
         def process(pipe, config):
             while True:
-                if os.system('sudo chrt -pi 0 %d 2> /dev/null > /dev/null' % os.getpid()):
+                cmd = 'sudo chrt -pi 0 %d 2> /dev/null > /dev/null' % os.getpid()
+                if os.system(cmd):
                     print('warning, failed to make hat web process idle, trying renice')
                 if os.system("sudo renice 20 %d" % os.getpid()):
                     print('warning, failed to renice hat web process')
