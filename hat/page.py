@@ -45,15 +45,27 @@ except ImportError:
     def gettime():
         return time.monotonic()
     def test_wifi():
+        sysnet = '/sys/class/net/'
         try:
-            wlan0 = open('/sys/class/net/wlan0/operstate')
-            line = wlan0.readline().rstrip()
-            wlan0.close()
-            if line == 'up':
-                return True
+            if test_wifi.last_test_wifi_iface:
+                with open(sysnet + test_wifi.last_test_wifi_iface + '/operstate') as wlan:
+                    line = wlan.readline().rstrip()
+                    if line == 'up':
+                        return True
+
+            for iface in os.listdir(sysnet):
+                if not iface.startswith('w'):
+                    continue
+                with open(sysnet + iface + '/operstate') as wlan:
+                    line = wlan.readline().rstrip()
+                    if line == 'up':
+                        test_wifi.last_test_wifi_iface = iface
+                        return True
         except OSError:
             pass
         return False
+
+    test_wifi.last_test_wifi_iface = None
 
     try:
         import gettext
